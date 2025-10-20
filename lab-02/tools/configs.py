@@ -14,7 +14,7 @@ BACKUP_DIR = os.getenv("BACKUP_DIR", "/data/backup/mysql")
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "7"))
 
 # Paths
-backup_dir_path = os.path.expanduser(BACKUP_DIR)
+backup_dirpath = os.path.expanduser(BACKUP_DIR)
 log_path = os.path.expanduser(f"{BACKUP_DIR}/backup.log")
 
 # Time format

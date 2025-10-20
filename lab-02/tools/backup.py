@@ -8,8 +8,8 @@ from cryptography.fernet import Fernet
 
 def backup():
     # Ensure backup dir exists
-    if not os.path.exists(backup_dir_path):
-        os.makedirs(backup_dir_path, exist_ok=True)
+    if not os.path.exists(backup_dirpath):
+        os.makedirs(backup_dirpath, exist_ok=True)
 
     # Ensure log file exists
     if not os.path.exists(log_path):
@@ -19,7 +19,7 @@ def backup():
     # Backup
     timestamp = datetime.now().strftime(date_tag_format)
     filename = f"{DB_NAME}_backup_{timestamp}"
-    filepath = os.path.join(backup_dir_path, filename + ".sql",)
+    filepath = os.path.join(backup_dirpath, filename + ".sql",)
 
     log("=" * 60)
     log("Starting MySQL back up...")
@@ -43,7 +43,7 @@ def backup():
         return
 
     # Compress
-    compressed_filepath = os.path.join(backup_dir_path, filename + ".gz")
+    compressed_filepath = os.path.join(backup_dirpath, filename + ".gz")
 
     log("Compressing backup file...")
     try:
@@ -70,7 +70,7 @@ def backup():
 
     log("Encrypting backup file...")
 
-    encrypted_filepath = os.path.join(backup_dir_path, filename + ".enc")
+    encrypted_filepath = os.path.join(backup_dirpath, filename + ".enc")
     try:
         cipher = Fernet(ENCRYPTION_KEY.encode())
 
