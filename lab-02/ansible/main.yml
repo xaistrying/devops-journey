@@ -16,16 +16,20 @@
         src: ../tools/
         dest: /data/src/mysql-backup
         recursive: true
-        rsync_opts:
-          - "--exclude:_*"
 
     - name: Create python virtual environment
       ansible.builtin.command: python3 -m venv /data/src/mysql-backup/.venv
       args:
-        creates: /data/src/mysql-backup/bin/activate
+        creates: /data/src/mysql-backup/.venv/bin/activate
 
     - name: Install requirements.txt into the venv
       ansible.builtin.pip:
         requirements: /data/src/mysql-backup/requirements.txt
         virtualenv: /data/src/mysql-backup/.venv
         virtualenv_python: python3
+
+    - name: Rsync runs directory to server
+      ansible.posix.synchronize:
+        src: ./runs
+        dest: /data/src/mysql-backup
+        recursive: true
