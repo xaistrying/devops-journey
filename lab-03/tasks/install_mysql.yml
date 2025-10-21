@@ -1,0 +1,99 @@
+---
+- name: Install MySQL and MySQL server
+  block:
+    - name: Download MySQL deb file
+      ansible.builtin.get_url:
+        url: "
+          https://repo.mysql.com/apt/ubuntu/pool/mysql-apt-config/m/mysql-apt-config/\
+          mysql-apt-config_0.{{ mysql_version }}-1_all.deb"
+        dest: "{{ source_path }}"
+        mode: '0644'
+
+    - name: Find MySQL .deb file
+      ansible.builtin.find:
+        paths: "{{ source_path }}"
+        patterns: "mysql*.deb"
+        recurse: false
+      register: found_deb_files
+
+    - name: Fail if no .deb file found
+      ansible.builtin.fail:
+        msg: "No .deb files found in {{ source_path }}"
+      when: found_deb_files.files | length == 0
+
+    - name: Install MySQL from found .deb file
+      ansible.builtin.apt:
+        deb: "{{ found_deb_files.files[0].path }}"
+        state: present
+      environment:
+        # no question is asked during apt install
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Update APT cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install MySQL server
+      ansible.builtin.apt:
+        name: mysql-server
+        state: present
+
+    - name: Verify MySQL installation
+      ansible.builtin.command:
+        cmd: "mysql --version"
+      changed_when: false
+
+    - name: Get installed MySQL packages
+      ansible.builtin.shell: "dpkg -l | awk '/^ii/ && /mysql/ {print $2}'"
+      register: mysql_packages
+
+    - name: Hold all installed MySQL packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ mysql_packages.stdout_lines }}"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+- name: Migrate MySQL to custom data directory
+  block:
+    - name: Stop MySQL service
+      ansible.builtin.systemd:
+        name: mysql
+        state: stopped
+
+    - name: Ensure MySQL custom directories exists
+      ansible.builtin.file:
+        path: "{{ mysql_data_dir }}"
+        state: directory
+        owner: mysql
+        group: mysql
+        mode: '0750'
+
+    - name: Check if default MySQL data exists
+      ansible.builtin.stat:
+        path: /var/lib/mysql
+      register: default_mysql_data
+
+    - name: Rsync MySQL data to custom directory
+      ansible.builtin.command:
+        cmd: "rsync -a /var/lib/mysql /data/"
+      when: default_mysql_data.stat.exists
+
+    - name: Deploy MySQL configuration from template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/configs/mysql/my.cnf"
+        dest: "/etc/mysql/my.cnf"
+        owner: mysql
+        group: mysql
+        mode: '0644'
+        backup: true
+
+    - name: Start MySQL service
+      ansible.builtin.systemd:
+        name: mysql
+        state: started
+        enabled: true
+        daemon_reload: true

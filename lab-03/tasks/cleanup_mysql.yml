@@ -1,0 +1,65 @@
+---
+- name: Detect existing MySQL
+  ansible.builtin.command:
+    cmd: "mysql --version"
+  register: mysql_check
+  changed_when: false
+  failed_when: false
+
+- name: Cleanup MySQL
+  when: mysql_check.rc == 0
+  block:
+    - name: Stop MySQL service if running
+      ansible.builtin.systemd:
+        name: mysql
+        state: stopped
+      failed_when: false
+
+    - name: Get held MySQL packages from dpkg selections
+      ansible.builtin.shell:
+        cmd: dpkg --get-selections | awk '/mysql/ && $2 == "hold" {print $1}'
+      register: mysql_packages
+
+    - name: Unhold all installed MySQL packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop: "{{ mysql_packages.stdout_lines }}"
+
+    - name: Remove MySQL packages
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: absent
+        purge: true       # Removes the package and its config files
+        autoremove: true  # Removes its orphaned dependencies
+      loop: "{{ mysql_packages.stdout_lines }}"
+
+    - name: Remove MySQL service
+      ansible.builtin.file:
+        name: "/lib/systemd/system/mysql.service"
+        state: absent
+
+    - name: Remove MySQL directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/mysql
+        - /var/log/mysql
+        - /etc/mysql
+        - /var/run/mysqld
+        - /run/mysql
+        - /data/mysql
+
+    - name: Fix broken dpkg
+      ansible.builtin.command: dpkg --configure -a
+      changed_when: false
+
+    - name: Clean apt cache
+      ansible.builtin.apt:
+        autoclean: true
+        autoremove: true
+
+    - name: Update apt cache after cleanup
+      ansible.builtin.apt:
+        update_cache: true
