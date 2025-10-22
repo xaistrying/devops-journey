@@ -1,0 +1,79 @@
+---
+- name: Detect existing PostgreSQL
+  ansible.builtin.command:
+    cmd: "psql --version"
+  changed_when: false
+  failed_when: false
+
+- name: Check if PostgreSQL process exists
+  ansible.builtin.shell: pgrep -x postgresql
+  register: psql_check
+  failed_when: false
+  changed_when: false
+
+- name: Force kill PostgreSQL process
+  ansible.builtin.command:
+    cmd: pkill -9 postgresql
+  when: psql_check.rc == 0
+  failed_when: false
+  register: pkill_result
+  changed_when: pkill_result.rc == 0
+
+- name: Stop PostgreSQL service if running
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+  failed_when: false
+  timeout: 5
+  when: psql_check.rc == 0
+
+- name: Get held PostgreSQL packages from dpkg selections
+  ansible.builtin.shell:
+    cmd: dpkg --get-selections | awk '/postgresql/ && $2 == "hold" {print $1}'
+  register: psql_packages
+
+- name: Unhold all installed PostgreSQL packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ psql_packages.stdout_lines }}"
+
+- name: Remove PostgreSQL packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: absent
+    purge: true
+  loop: "{{ psql_packages.stdout_lines }}"
+
+- name: Remove PostgreSQL directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/postgresql
+    - /var/log/postgresql
+    - /etc/postgresql
+    - /var/run/postgresql
+    - /run/postgresql
+    - /data/postgresql
+
+- name: Remove PostgreSQL keyrings and list
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/keyrings/postgresql.gpg
+    - /etc/apt/sources.list.d/postgresql.list
+
+- name: Fix broken dpkg
+  ansible.builtin.command: dpkg --configure -a
+  changed_when: false
+
+- name: Clean apt cache
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+
+- name: Update apt cache after cleanup
+  ansible.builtin.apt:
+    update_cache: true

@@ -1,0 +1,76 @@
+---
+- name: Detect existing Redis
+  ansible.builtin.command:
+    cmd: "redis-server --version"
+  register: redis_check
+  changed_when: false
+  failed_when: false
+
+- name: Check if Redis process exists
+  ansible.builtin.shell: pgrep -x redis-server
+  register: redis_check
+  failed_when: false
+  changed_when: false
+
+- name: Force kill Redis process
+  ansible.builtin.command:
+    cmd: pkill -9 redis-server
+  register: pkill_result
+  failed_when: false
+  changed_when: pkill_result.rc == 0
+
+- name: Stop Redis service if running
+  ansible.builtin.systemd:
+    name: redis-server
+    state: stopped
+  failed_when: false
+  timeout: 5
+  when: redis_check.rc == 0
+
+- name: Get held Redis packages from dpkg selections
+  ansible.builtin.shell:
+    cmd: dpkg --get-selections | awk '/redis/ && $2 == "hold" {print $1}'
+  register: redis_packages
+
+- name: Unhold all installed Redis packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ redis_packages.stdout_lines }}"
+
+- name: Remove Redis packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: absent
+    purge: true
+  loop: "{{ redis_packages.stdout_lines }}"
+
+- name: Remove Redis directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/redis
+    - /var/log/redis
+    - /etc/redis
+    - /var/run/redis
+    - /run/redis
+    - /data/redis
+
+- name: Remove redis keyrings and list
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/keyrings/redis.gpg
+    - /etc/apt/sources.list.d/redis.list
+
+- name: Fix broken dpkg
+  ansible.builtin.command: dpkg --configure -a
+  changed_when: false
+
+- name: Clean and update apt
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+    update_cache: true

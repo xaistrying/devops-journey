@@ -15,23 +15,23 @@
       ansible.builtin.include_tasks:
         tasks/cleanup_mysql.yml
 
-    # - name: Cleanup Redis
-    #   ansible.builtin.include_tasks:
-    #     tasks/cleanup_redis.yml
+    - name: Cleanup Redis
+      ansible.builtin.include_tasks:
+        tasks/cleanup_redis.yml
 
-    # - name: Cleanup PostgreSQL
-    #   ansible.builtin.include_tasks:
-    #     tasks/cleanup_postgresql.yml
+    - name: Cleanup PostgreSQL
+      ansible.builtin.include_tasks:
+        tasks/cleanup_postgresql.yml
 
   tasks:
     - name: Install MySQL
       ansible.builtin.import_tasks:
         tasks/install_mysql.yml
 
-    # - name: Install Redis
-    #   ansible.builtin.import_tasks:
-    #     tasks/install_redis.yml
+    - name: Install Redis
+      ansible.builtin.import_tasks:
+        tasks/install_redis.yml
 
-    # - name: Install PostgreSQL
-    #   ansible.builtin.import_tasks:
-    #     tasks/install_postgresql.yml
+    - name: Install PostgreSQL
+      ansible.builtin.import_tasks:
+        tasks/install_postgresql.yml

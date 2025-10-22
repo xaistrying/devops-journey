@@ -25,7 +25,6 @@ common_directories:
   - "/data/src"
   - "/data/logs"
   - "/data/src/gpg-key"
-  - "/data/src/keyrings"
 
 common_packages:
   - curl

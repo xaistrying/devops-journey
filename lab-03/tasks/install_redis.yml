@@ -1,0 +1,117 @@
+---
+- name: Install Redis GPG key and APT repo
+  block:
+    - name: Create standard keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download and convert Redis GPG key
+      ansible.builtin.shell: |
+        curl -fsSL https://packages.redis.io/gpg | \
+        gpg --dearmor -o /etc/apt/keyrings/redis.gpg
+      args:
+        creates: /etc/apt/keyrings/redis.gpg
+
+    - name: Add Redis APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/redis.gpg] https://packages.redis.io/deb {{ ansible_distribution_release }} main"
+        filename: redis
+        state: present
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+- name: Install Redis
+  block:
+    # Prevent auto-start with policy-rc.d
+    - name: Create policy-rc.d to prevent service auto-start
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          exit 101
+        dest: /usr/sbin/policy-rc.d
+        mode: '0755'
+
+    - name: Install Redis
+      ansible.builtin.apt:
+        name:
+          - redis-server={{ redis_version }}
+          - redis={{ redis_version }}
+          - redis-tools={{ redis_version }}
+        state: present
+
+    - name: Remove policy-rc.d
+      ansible.builtin.file:
+        path: /usr/sbin/policy-rc.d
+        state: absent
+
+    - name: Get installed Redis packages
+      ansible.builtin.shell: "dpkg -l | awk '/^ii/ && /redis/ {print $2}'"
+      register: redis_packages
+
+    - name: Hold all installed Redis packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ redis_packages.stdout_lines }}"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+- name: Migrate Redis to custom data directory
+  block:
+    - name: Check if Redis process exists
+      ansible.builtin.shell: pgrep -x redis-server
+      register: redis_check
+      failed_when: false
+      changed_when: false
+
+    - name: Force kill Redis process
+      ansible.builtin.command:
+        cmd: pkill -9 redis-server
+      when: redis_check.rc == 0
+      register: pkill_result
+      changed_when: pkill_result.rc == 0
+
+    - name: Stop Redis service
+      ansible.builtin.systemd:
+        name: redis-server
+        state: stopped
+
+    - name: Ensure Redis custom directories exists
+      ansible.builtin.file:
+        path: "{{ redis_data_dir }}"
+        state: directory
+        owner: redis
+        group: redis
+        mode: '0750'
+
+    - name: Check if default Redis data exists
+      ansible.builtin.stat:
+        path: /var/lib/redis
+      register: default_redis_data
+
+    - name: Rsync Redis data to custom directory
+      ansible.builtin.command:
+        cmd: "rsync -a /var/lib/redis /data/"
+      when: default_redis_data.stat.exists
+
+    - name: Deploy Redis configuration from template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/configs/redis/redis.conf"
+        dest: "/etc/redis/redis.conf"
+        owner: redis
+        group: redis
+        mode: '0644'
+        backup: true
+
+    - name: Start Redis service
+      ansible.builtin.systemd:
+        name: redis-server
+        state: started
+        enabled: true
+        daemon_reload: true

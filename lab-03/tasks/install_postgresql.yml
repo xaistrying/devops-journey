@@ -1,0 +1,86 @@
+---
+- name: Install PostgreSQL GPG key and APT repo
+  block:
+    - name: Download PostgreSQL GPG key
+      ansible.builtin.get_url:
+        url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        dest: /data/src/gpg-key/postgresql.asc
+        mode: '0644'
+
+    - name: Add PostgreSQL APT repository
+      ansible.builtin.apt_repository:
+        repo: "
+          deb [signed-by=/data/src/gpg-key/postgresql.asc] \
+          https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+        filename: postgresql
+        state: present
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+- name: Install PostgreSQL
+  block:
+    - name: Install PostgreSQL
+      ansible.builtin.apt:
+        name:
+          - "postgresql-{{ postgresql_version }}"
+          - "postgresql-client-{{ postgresql_version }}"
+        state: present
+
+    - name: Verify PostgreSQL installation
+      block:
+        - name: Check PostgreSQL version
+          ansible.builtin.command:
+            cmd: "psql --version"
+          changed_when: false
+
+    - name: Get installed PostgreSQL packages
+      ansible.builtin.shell: "dpkg -l | awk '/^ii/ && /postgresql/ {print $2}'"
+      register: postgresql_packages
+
+    - name: Hold all installed PostgreSQL packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ postgresql_packages.stdout_lines }}"
+
+- name: Migrate PostgreSQL to custom data directory
+  block:
+    - name: Stop PostgreSQL service
+      ansible.builtin.systemd:
+        name: postgresql
+        state: stopped
+
+    - name: Ensure PostgreSQL custom directories
+      ansible.builtin.file:
+        path: "{{ postgresql_data_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0750'
+
+    - name: Check if default PostgreSQL data exists
+      ansible.builtin.stat:
+        path: /var/lib/postgresql
+      register: default_postgresql_data
+
+    - name: Rsync PostgreSQL data to custom directory
+      ansible.builtin.command:
+        cmd: "rsync -a /var/lib/postgresql /data/"
+      when: default_postgresql_data.stat.exists
+
+    - name: Deploy PostgreSQL configuration from template
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/configs/postgresql/postgresql.conf"
+        dest: "/etc/postgresql/15/main/postgresql.conf"
+        owner: postgres
+        group: postgres
+        mode: '0644'
+        backup: true
+
+    - name: Start PostgreSQL service
+      ansible.builtin.systemd:
+        name: postgresql
+        state: started
+        enabled: true
