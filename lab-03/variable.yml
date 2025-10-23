@@ -37,3 +37,7 @@ common_packages:
 
 source_path: "/data/src/"
 logs_path: "/data/logs/"
+
+run_cleanup_mysql_before_install: false
+run_cleanup_redis_before_install: false
+run_cleanup_postgresql_before_install: false

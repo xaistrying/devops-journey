@@ -12,14 +12,17 @@
         tasks/common_setup.yml
 
     - name: Cleanup MySQL
+      when: run_cleanup_mysql_before_install
       ansible.builtin.include_tasks:
         tasks/cleanup_mysql.yml
 
     - name: Cleanup Redis
+      when: run_cleanup_redis_before_install
       ansible.builtin.include_tasks:
         tasks/cleanup_redis.yml
 
     - name: Cleanup PostgreSQL
+      when: run_cleanup_postgresql_before_install
       ansible.builtin.include_tasks:
         tasks/cleanup_postgresql.yml
 
