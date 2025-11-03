@@ -1,0 +1,53 @@
+# --------------------------------------------------
+# NAMESPACE
+# --------------------------------------------------
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    name: dev
+
+---
+# --------------------------------------------------
+# RESOURCE QUOTA: Limit resources for namespace
+# --------------------------------------------------
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dev-quota
+  namespace: dev
+spec:
+  hard:
+    pods: "10"
+    configmaps: "50"
+    secrets: "50"
+
+---
+# --------------------------------------------------
+# LIMIT RANGE: Limit resources for pod
+# --------------------------------------------------
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: dev-limitrange
+  namespace: dev
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"
+      memory: "512Mi"
+    max:
+      cpu: "2"
+      memory: "2Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+  - type: Pod
+    max:
+      cpu: "4"
+      memory: "4Gi"
