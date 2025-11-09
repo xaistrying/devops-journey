@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-deployment
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: java-app
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+
+  selector:
+    matchLabels:
+      app: java-app
+
+  template:
+    metadata:
+      labels:
+        app: java-app
+    spec:
+      serviceAccountName: java-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+      - name: java-container
+        image: java-app:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+
+        envFrom:
+        - configMapRef:
+            name: java-configmap
+        - secretRef:
+            name: java-secret
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
